@@ -1,0 +1,39 @@
+{
+  "cli": {
+    "version": ">= 0.60.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.ai"
+      }
+    },
+    "preview": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "distribution": "internal"
+      },
+      "env": {
+        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.ai"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "ios": {
+        "distribution": "store"
+      },
+      "env": {
+        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.ai"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
