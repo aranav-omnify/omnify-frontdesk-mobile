@@ -20,6 +20,47 @@ import { APP_CONFIG } from "../constants";
 const BASE_URL =
   process.env.EXPO_PUBLIC_BASE_URL || APP_CONFIG.DEFAULT_BASE_URL;
 
+const THEME_DETECTION_SCRIPT = `
+  (function() {
+    function getTheme() {
+      return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    }
+
+    function sendTheme() {
+      const theme = getTheme();
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          action: 'THEME_CHANGE',
+          payload: { theme: theme }
+        }));
+      }
+    }
+
+    // Send initial theme
+    if (document.readyState === 'complete') {
+      sendTheme();
+    } else {
+      window.addEventListener('load', sendTheme);
+      document.addEventListener('DOMContentLoaded', sendTheme);
+    }
+
+    // Watch for dynamic changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+          sendTheme();
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+  })();
+  true;
+`;
+
 interface WebViewScreenProps {
   routePath?: string;
 }
@@ -122,6 +163,7 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           geolocationEnabled={true}
+          injectedJavaScript={THEME_DETECTION_SCRIPT}
           onLoadEnd={handleLoadEnd}
           onMessage={onMessage}
           onError={(syntheticEvent) => {
