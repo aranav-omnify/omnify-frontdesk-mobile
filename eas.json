@@ -32,7 +32,7 @@
         "distribution": "store"
       },
       "env": {
-        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.info"
+        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.io"
       }
     }
   },
