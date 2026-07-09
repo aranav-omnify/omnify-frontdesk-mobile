@@ -8,19 +8,34 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.ai"
+        "APP_ENV": "staging",
+        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.info"
       }
     },
-    "preview": {
+    "staging": {
       "autoIncrement": true,
       "android": {
         "buildType": "apk"
       },
       "ios": {
-        "distribution": "internal"
+        "distribution": "store"
       },
       "env": {
-        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.ai"
+        "APP_ENV": "staging",
+        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.info"
+      }
+    },
+    "preprod": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "distribution": "store"
+      },
+      "env": {
+        "APP_ENV": "preprod",
+        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.io"
       }
     },
     "production": {
@@ -32,7 +47,8 @@
         "distribution": "store"
       },
       "env": {
-        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.io"
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.ai"
       }
     }
   },
