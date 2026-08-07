@@ -48,11 +48,13 @@
       },
       "env": {
         "APP_ENV": "production",
-        "EXPO_PUBLIC_BASE_URL": "https://frontdesk.getomnify.ai"
+        "EXPO_PUBLIC_BASE_URL": "https://admin.getomnify.ai"
       }
     }
   },
   "submit": {
+    "staging": {},
+    "preprod": {},
     "production": {}
   }
 }
