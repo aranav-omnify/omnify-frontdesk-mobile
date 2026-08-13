@@ -10,8 +10,6 @@ let splashLight = './assets/images/splash-icon-light.png';
 let splashDark = './assets/images/splash-icon-dark.png';
 
 let version = '1.0.0';
-let buildNumber = '1';
-let versionCode = 1;
 
 
 if (IS_PREPROD) {
@@ -22,8 +20,6 @@ if (IS_PREPROD) {
   splashDark = './assets/images/Preprod.png';
   
   version = '1.0.0'; // You can change this independently for preprod
-  buildNumber = '1';
-  versionCode = 1;
 } else if (IS_STAGING) {
   name = 'Omnify Frontdesk Staging';
   bundleIdentifier = 'com.developersomnify.frontdesk.staging';
@@ -32,8 +28,6 @@ if (IS_PREPROD) {
   splashDark = './assets/images/Staging.png';
 
   version = '1.0.0'; // You can change this independently for staging
-  buildNumber = '1';
-  versionCode = 1;
 }
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
@@ -49,7 +43,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier,
-    buildNumber,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false
     }
@@ -62,8 +55,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     edgeToEdgeEnabled: true,
     softwareKeyboardLayoutMode: "resize",
     predictiveBackGestureEnabled: false,
-    package: bundleIdentifier,
-    versionCode
+    package: bundleIdentifier
   },
   web: {
     output: "static",
