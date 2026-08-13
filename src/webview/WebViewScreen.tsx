@@ -1,6 +1,7 @@
 import * as SplashScreen from "expo-splash-screen";
 import { setStatusBarStyle } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
+import * as Location from "expo-location";
 import { useEffect, useRef, useState } from "react";
 import {
     KeyboardAvoidingView,
@@ -10,6 +11,8 @@ import {
     TouchableOpacity,
     View,
     useColorScheme,
+    Alert,
+    Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -57,6 +60,35 @@ const THEME_DETECTION_SCRIPT = `
       attributes: true,
       attributeFilter: ['class']
     });
+
+    // --- CONSOLE LOG FORWARDING ---
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
+
+    console.log = function() {
+      const args = Array.from(arguments);
+      originalLog.apply(console, args);
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CONSOLE_LOG', level: 'log', message: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }));
+      }
+    };
+    
+    console.error = function() {
+      const args = Array.from(arguments);
+      originalError.apply(console, args);
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CONSOLE_LOG', level: 'error', message: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }));
+      }
+    };
+    
+    console.warn = function() {
+      const args = Array.from(arguments);
+      originalWarn.apply(console, args);
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CONSOLE_LOG', level: 'warn', message: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }));
+      }
+    };
   })();
   true;
 `;
@@ -81,6 +113,10 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
       setTheme(systemColorScheme);
     }
   }, [systemColorScheme]);
+
+  const handleNavigationStateChange = async (navState: any) => {
+    // No-op for now, location request moved to onMessage
+  };
 
   // Initial URI construction
   const getTargetUri = (path: string) => {
@@ -123,9 +159,90 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
   };
 
   const onMessage = async (event: any) => {
-    console.log("[Native] onMessage received:", event.nativeEvent.data);
     try {
       const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === "CONSOLE_LOG") {
+        console.log(`[Website ${data.level.toUpperCase()}]:`, data.message);
+        return;
+      }
+
+      if (data.action === "REQUEST_LOCATION_PERMISSION") {
+        if (Platform.OS === 'android') {
+          try {
+            console.log("[Native] Requesting foreground permissions...");
+            const response = await Location.requestForegroundPermissionsAsync();
+            const { status, canAskAgain } = response;
+            console.log("[Native] Permission status returned:", status, "canAskAgain:", canAskAgain);
+            let granted = status === 'granted';
+            
+            // If the app has permission, also check if the phone's GPS is actually turned on!
+            if (granted) {
+              const servicesEnabled = await Location.hasServicesEnabledAsync();
+              if (!servicesEnabled) {
+                console.log("[Native] GPS is off! Prompting user to turn it on...");
+                try {
+                  await Location.enableNetworkProviderAsync();
+                  console.log("[Native] User turned on GPS successfully.");
+                } catch (e) {
+                  console.log("[Native] User refused to turn on GPS.");
+                  granted = false; // Deny it if they refuse to turn on GPS
+                }
+              }
+            } else if (!canAskAgain) {
+              // Permission was denied by the user permanently (OS won't show prompt anymore).
+              // Prompt them to open OS settings since they can't re-trigger the default prompt.
+              Alert.alert(
+                "Location Permission Required",
+                "Please enable location permissions for this app in your device settings to clock in.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Open Settings", onPress: () => Linking.openSettings() }
+                ]
+              );
+            }
+            
+            webViewRef.current?.injectJavaScript(`
+              console.log("[Website] Received NATIVE_LOCATION_RESULT: ${granted}");
+              window.dispatchEvent(new CustomEvent('NATIVE_LOCATION_RESULT', { detail: { granted: ${granted} } }));
+              true;
+            `);
+          } catch (e) {
+            console.warn("[Native] Failed to request location permission", e);
+            webViewRef.current?.injectJavaScript(`
+              window.dispatchEvent(new CustomEvent('NATIVE_LOCATION_RESULT', { detail: { granted: false } }));
+              true;
+            `);
+          }
+        } else {
+          // iOS handles the prompt natively via the WebView when it actually tries to read GPS.
+          // However, we can check if they ALREADY denied it at the OS level so we can show the Settings alert!
+          const { status } = await Location.getForegroundPermissionsAsync();
+          if (status === 'denied') {
+            Alert.alert(
+              "Location Permission Required",
+              "Please enable location permissions for this app in your device settings to clock in.",
+              [
+                { text: "Cancel", style: "cancel" },
+                { text: "Open Settings", onPress: () => Linking.openSettings() }
+              ]
+            );
+            webViewRef.current?.injectJavaScript(`
+              window.dispatchEvent(new CustomEvent('NATIVE_LOCATION_RESULT', { detail: { granted: false } }));
+              true;
+            `);
+            return;
+          }
+
+          webViewRef.current?.injectJavaScript(`
+            window.dispatchEvent(new CustomEvent('NATIVE_LOCATION_RESULT', { detail: { granted: true } }));
+            true;
+          `);
+        }
+        return;
+      }
+      
+      console.log("[Native] onMessage received:", event.nativeEvent.data);
+      
       if (data.action === "THEME_CHANGE" && data.payload?.theme) {
         setTheme(data.payload.theme);
       }
@@ -163,9 +280,17 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           geolocationEnabled={true}
+          cacheEnabled={false}
+          applicationNameForUserAgent="OmnifyMobileApp"
+          // iOS: WKWebView needs these for getUserMedia to work inline instead of
+          // forcing fullscreen, and to avoid re-prompting on every capture call.
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
           injectedJavaScript={THEME_DETECTION_SCRIPT}
           onLoadEnd={handleLoadEnd}
           onMessage={onMessage}
+          onNavigationStateChange={handleNavigationStateChange}
           onError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
             console.warn("WebView error: ", nativeEvent);

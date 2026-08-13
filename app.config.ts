@@ -72,6 +72,26 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "expo-router",
     [
+      "expo-camera",
+      {
+        cameraPermission: "Omnify Frontdesk uses the camera to capture member photos and documents during check-in.",
+        // No mic use: drop NSMicrophoneUsageDescription and RECORD_AUDIO.
+        microphonePermission: false,
+        recordAudioAndroid: false
+      }
+    ],
+    [
+      "expo-location",
+      {
+        // When-in-use only. Requesting Always triggers background-location review on both stores.
+        locationWhenInUsePermission: "Omnify Frontdesk uses your location to verify check-ins at your studio.",
+        locationAlwaysPermission: false,
+        locationAlwaysAndWhenInUsePermission: false,
+        isIosBackgroundLocationEnabled: false,
+        isAndroidBackgroundLocationEnabled: false
+      }
+    ],
+    [
       "expo-splash-screen",
       {
         image: splashLight,
