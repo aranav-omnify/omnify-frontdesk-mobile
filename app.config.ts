@@ -44,7 +44,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier,
     infoPlist: {
-      ITSAppUsesNonExemptEncryption: false
+      ITSAppUsesNonExemptEncryption: false,
+      NSCameraUsageDescription: "Omnify Frontdesk needs access to your camera to upload profile pictures.",
+      NSPhotoLibraryUsageDescription: "Omnify Frontdesk needs access to your photo library to upload profile pictures.",
+      NSMicrophoneUsageDescription: "Omnify Frontdesk needs access to your microphone to record videos for profile pictures."
     }
   },
   android: {
@@ -52,6 +55,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#262626",
       foregroundImage: icon
     },
+    permissions: [
+      "android.permission.CAMERA",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.RECORD_AUDIO"
+    ],
     edgeToEdgeEnabled: true,
     softwareKeyboardLayoutMode: "resize",
     predictiveBackGestureEnabled: false,
