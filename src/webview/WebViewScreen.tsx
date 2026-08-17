@@ -4,6 +4,7 @@ import * as SystemUI from "expo-system-ui";
 import * as Location from "expo-location";
 import { useEffect, useRef, useState } from "react";
 import {
+    AppState,
     KeyboardAvoidingView,
     Platform,
     StyleSheet,
@@ -130,6 +131,8 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
   useEffect(() => {
     SplashScreen.hideAsync();
   }, []);
+
+
 
   // Handle deep link updates when the app is already open
   useEffect(() => {
@@ -279,8 +282,8 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
           domStorageEnabled
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
+          incognito={false}
           geolocationEnabled={true}
-          cacheEnabled={false}
           applicationNameForUserAgent="OmnifyMobileApp"
           // iOS: WKWebView needs these for getUserMedia to work inline instead of
           // forcing fullscreen, and to avoid re-prompting on every capture call.
@@ -291,6 +294,12 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
           onLoadEnd={handleLoadEnd}
           onMessage={onMessage}
           onNavigationStateChange={handleNavigationStateChange}
+          // iOS: WKWebView content process can be killed by the OS under memory
+          // pressure, leaving a blank screen. Reload to recover gracefully.
+          onContentProcessDidTerminate={() => {
+            console.warn("[Native] WebView content process terminated, reloading...");
+            webViewRef.current?.reload();
+          }}
           onError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
             console.warn("WebView error: ", nativeEvent);
