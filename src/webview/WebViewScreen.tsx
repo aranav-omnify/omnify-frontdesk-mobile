@@ -112,6 +112,21 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
   useEffect(() => {
     if (systemColorScheme) {
       setTheme(systemColorScheme);
+      // Force the web app to match the native system theme
+      webViewRef.current?.injectJavaScript(`
+        try {
+          localStorage.setItem('omnify_theme_mode', '${systemColorScheme}');
+          if ('${systemColorScheme}' === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+          window.dispatchEvent(new Event('storage'));
+        } catch (e) {
+          console.error('Error syncing theme to web:', e);
+        }
+        true;
+      `);
     }
   }, [systemColorScheme]);
 
@@ -149,7 +164,7 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
   // Update system background color and status bar style when theme changes
   useEffect(() => {
     const isDark = theme === "dark";
-    const bgColor = isDark ? "#000000" : "#ffffff";
+    const bgColor = isDark ? "#1a1a1a" : "#ffffff";
     SystemUI.setBackgroundColorAsync(bgColor);
     setStatusBarStyle(isDark ? "light" : "dark");
   }, [theme]);
@@ -264,20 +279,20 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
 
   return (
     <SafeAreaView
-      style={[styles.container, { backgroundColor: isDark ? "#000" : "#fff" }]}
+      style={[styles.container, { backgroundColor: isDark ? "#1a1a1a" : "#fff" }]}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={[
           styles.container,
-          { backgroundColor: isDark ? "#000" : "#fff" },
+          { backgroundColor: isDark ? "#1a1a1a" : "#fff" },
         ]}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <WebView
           ref={webViewRef}
           source={{ uri: initialUri }}
-          style={{ backgroundColor: isDark ? "#000" : "#fff" }}
+          style={{ backgroundColor: isDark ? "#1a1a1a" : "#fff" }}
           javaScriptEnabled
           domStorageEnabled
           sharedCookiesEnabled
@@ -315,7 +330,7 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
         <View
           style={[
             styles.overlayContainer,
-            { backgroundColor: isDark ? "#000" : "#fff" },
+            { backgroundColor: isDark ? "#1a1a1a" : "#fff" },
           ]}
         >
           <Text
