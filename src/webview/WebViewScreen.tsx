@@ -30,37 +30,72 @@ const THEME_DETECTION_SCRIPT = `
       return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
     }
 
+    function getBgColor(x, y) {
+      try {
+        let el = document.elementFromPoint(x, y);
+        while (el && el !== document) {
+          const bg = window.getComputedStyle(el).backgroundColor;
+          if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+            const match = bg.match(/rgba\\([^,]+,[^,]+,[^,]+,\\s*(0|0\\.0+)\\)/);
+            if (!match) {
+              return bg;
+            }
+          }
+          el = el.parentNode;
+        }
+      } catch(e) {}
+      return null;
+    }
+
+    let lastTopBg = null;
+    let lastBottomBg = null;
+    let lastTheme = null;
+
     function sendTheme() {
       const theme = getTheme();
-      if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          action: 'THEME_CHANGE',
-          payload: { theme: theme }
-        }));
+      const topBg = getBgColor(window.innerWidth / 2, 10);
+      const bottomBg = getBgColor(window.innerWidth / 2, window.innerHeight - 10);
+
+      if (theme !== lastTheme || topBg !== lastTopBg || bottomBg !== lastBottomBg) {
+        lastTheme = theme;
+        lastTopBg = topBg;
+        lastBottomBg = bottomBg;
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            action: 'THEME_CHANGE',
+            payload: { theme, topBg, bottomBg }
+          }));
+        }
       }
     }
 
     // Send initial theme
     if (document.readyState === 'complete') {
-      sendTheme();
+      setTimeout(sendTheme, 100);
     } else {
-      window.addEventListener('load', sendTheme);
-      document.addEventListener('DOMContentLoaded', sendTheme);
+      window.addEventListener('load', () => setTimeout(sendTheme, 100));
+      document.addEventListener('DOMContentLoaded', () => setTimeout(sendTheme, 100));
     }
 
     // Watch for dynamic changes
     const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-          sendTheme();
-        }
-      });
+      clearTimeout(window.themeUpdateTimeout);
+      window.themeUpdateTimeout = setTimeout(sendTheme, 50);
     });
 
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['class']
     });
+    
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
+
+    setInterval(sendTheme, 500);
 
     // --- CONSOLE LOG FORWARDING ---
     const originalLog = console.log;
@@ -107,6 +142,8 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
   const [theme, setTheme] = useState<"light" | "dark">(
     systemColorScheme === "dark" ? "dark" : "light",
   );
+  const [topBg, setTopBg] = useState<string | null>(null);
+  const [bottomBg, setBottomBg] = useState<string | null>(null);
 
   // Sync with system theme when it changes (before WebView loads or as fallback)
   useEffect(() => {
@@ -164,10 +201,11 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
   // Update system background color and status bar style when theme changes
   useEffect(() => {
     const isDark = theme === "dark";
-    const bgColor = isDark ? "#1a1a1a" : "#ffffff";
+    const defaultBg = isDark ? "#1a1a1a" : "#ffffff";
+    const bgColor = topBg || defaultBg;
     SystemUI.setBackgroundColorAsync(bgColor);
     setStatusBarStyle(isDark ? "light" : "dark");
-  }, [theme]);
+  }, [theme, topBg]);
 
   const handleLoadEnd = () => {
     onLoadEndRef.current = true;
@@ -261,8 +299,10 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
       
       console.log("[Native] onMessage received:", event.nativeEvent.data);
       
-      if (data.action === "THEME_CHANGE" && data.payload?.theme) {
-        setTheme(data.payload.theme);
+      if (data.action === "THEME_CHANGE" && data.payload) {
+        if (data.payload.theme) setTheme(data.payload.theme);
+        if (data.payload.topBg) setTopBg(data.payload.topBg);
+        if (data.payload.bottomBg) setBottomBg(data.payload.bottomBg);
       }
     } catch (err) {
       console.error("Error handling WebView message:", err);
@@ -276,23 +316,35 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
   };
 
   const isDark = theme === "dark";
+  const defaultBg = isDark ? "#1a1a1a" : "#fff";
+  const safeAreaTopBg = topBg || defaultBg;
+  const safeAreaBottomBg = bottomBg || defaultBg;
+
+  // We use separate SafeAreaViews for top and bottom to independently style the status bar
+  // and the bottom navigation bar backgrounds based on the web view's active colors.
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: isDark ? "#1a1a1a" : "#fff" }]}
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={[
-          styles.container,
-          { backgroundColor: isDark ? "#1a1a1a" : "#fff" },
-        ]}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    <View style={[styles.container, { backgroundColor: safeAreaBottomBg }]}>
+      {/* Top Safe Area for Status Bar */}
+      <SafeAreaView edges={["top"]} style={{ backgroundColor: safeAreaTopBg, flex: 0 }} />
+      
+      {/* Main Content Area */}
+      <SafeAreaView
+        edges={["left", "right", "bottom"]}
+        style={[styles.container, { backgroundColor: safeAreaBottomBg }]}
       >
-        <WebView
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={[
+            styles.container,
+            { backgroundColor: safeAreaBottomBg },
+          ]}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+        >
+          <WebView
           ref={webViewRef}
           source={{ uri: initialUri }}
-          style={{ backgroundColor: isDark ? "#1a1a1a" : "#fff" }}
+          style={{ backgroundColor: safeAreaBottomBg }}
           javaScriptEnabled
           domStorageEnabled
           sharedCookiesEnabled
@@ -364,7 +416,8 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
           </TouchableOpacity>
         </View>
       )}
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
