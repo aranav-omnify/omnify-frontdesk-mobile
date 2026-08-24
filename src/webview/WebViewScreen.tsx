@@ -33,16 +33,42 @@ const THEME_DETECTION_SCRIPT = `
     function getBgColor(x, y) {
       try {
         let el = document.elementFromPoint(x, y);
+        let colors = [];
         while (el && el !== document) {
           const bg = window.getComputedStyle(el).backgroundColor;
           if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
-            const match = bg.match(/rgba\\([^,]+,[^,]+,[^,]+,\\s*(0|0\\.0+)\\)/);
-            if (!match) {
-              return bg;
+            colors.unshift(bg); // Add to start so bottom-most is first
+            const match = bg.match(/rgba\\([^,]+,\\s*[^,]+,\\s*[^,]+,\\s*([0-9.]+)\\)/);
+            if (!match || parseFloat(match[1]) === 1) {
+              break; // Found an opaque color, stop traversing
             }
           }
           el = el.parentNode;
         }
+
+        const isDark = document.documentElement.classList.contains('dark');
+        const defaultBg = isDark ? 'rgb(26, 26, 26)' : 'rgb(255, 255, 255)';
+        
+        if (colors.length === 0) return defaultBg;
+
+        // Use canvas to composite the colors and get the exact visual opaque color
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        const ctx = canvas.getContext('2d');
+        
+        // Fill with default background first
+        ctx.fillStyle = defaultBg;
+        ctx.fillRect(0, 0, 1, 1);
+
+        // Layer the found colors on top
+        for (let i = 0; i < colors.length; i++) {
+          ctx.fillStyle = colors[i];
+          ctx.fillRect(0, 0, 1, 1);
+        }
+        
+        const data = ctx.getImageData(0, 0, 1, 1).data;
+        return 'rgb(' + data[0] + ', ' + data[1] + ', ' + data[2] + ')';
       } catch(e) {}
       return null;
     }
