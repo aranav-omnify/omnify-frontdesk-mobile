@@ -57,11 +57,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     permissions: [
       "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO"
+    ],
+    // File uploads go through the WebView's system file chooser, which needs no
+    // storage permissions. Play policy rejects READ_MEDIA_* for this use case.
+    blockedPermissions: [
       "android.permission.READ_EXTERNAL_STORAGE",
       "android.permission.WRITE_EXTERNAL_STORAGE",
       "android.permission.READ_MEDIA_IMAGES",
-      "android.permission.READ_MEDIA_VIDEO",
-      "android.permission.RECORD_AUDIO"
+      "android.permission.READ_MEDIA_VIDEO"
     ],
     edgeToEdgeEnabled: true,
     softwareKeyboardLayoutMode: "resize",
