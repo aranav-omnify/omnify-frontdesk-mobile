@@ -23,7 +23,6 @@ import { APP_CONFIG } from "../constants";
 // Environment variables
 const BASE_URL =
   process.env.EXPO_PUBLIC_BASE_URL || APP_CONFIG.DEFAULT_BASE_URL;
-
 const THEME_DETECTION_SCRIPT = `
   (function() {
     function getTheme() {
@@ -335,6 +334,25 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
     }
   };
 
+  // Links opened in a new window (target="_blank" / window.open). Without this
+  // handler Android hands them to the system browser. Keep web pages in the
+  // WebView; only non-web schemes (mailto:, tel:, ...) go to the OS.
+  const handleOpenWindow = (event: any) => {
+    const { targetUrl } = event.nativeEvent;
+    // window.open() with no URL reports about:blank — nothing to open
+    if (!targetUrl || targetUrl.startsWith("about:")) return;
+
+    if (/^https?:\/\//i.test(targetUrl)) {
+      webViewRef.current?.injectJavaScript(
+        `window.location.href = ${JSON.stringify(targetUrl)}; true;`,
+      );
+    } else {
+      Linking.openURL(targetUrl).catch((err) =>
+        console.warn("[Native] Failed to open external URL:", err),
+      );
+    }
+  };
+
   const handleRetry = () => {
     setError(null);
     setLoading(true);
@@ -387,6 +405,7 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
           onLoadEnd={handleLoadEnd}
           onMessage={onMessage}
           onNavigationStateChange={handleNavigationStateChange}
+          onOpenWindow={handleOpenWindow}
           // iOS: WKWebView content process can be killed by the OS under memory
           // pressure, leaving a blank screen. Reload to recover gracefully.
           onContentProcessDidTerminate={() => {
