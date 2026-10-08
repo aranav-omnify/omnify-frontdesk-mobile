@@ -19,6 +19,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import ViewLoader from "../components/ViewLoader";
 import { APP_CONFIG } from "../constants";
+import FilePreviewModal from "./FilePreviewModal";
+import {
+  DownloadedFile,
+  FILE_DOWNLOAD_BRIDGE_SCRIPT,
+  FileIntent,
+  downloadUrlToFile,
+  saveFile,
+  writeBase64File,
+} from "./fileDownloads";
 
 // Environment variables
 const BASE_URL =
@@ -169,6 +178,7 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
   );
   const [topBg, setTopBg] = useState<string | null>(null);
   const [bottomBg, setBottomBg] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<DownloadedFile | null>(null);
 
   // Sync with system theme when it changes (before WebView loads or as fallback)
   useEffect(() => {
@@ -321,7 +331,32 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
         }
         return;
       }
-      
+
+      // File actions forwarded by FILE_DOWNLOAD_BRIDGE_SCRIPT. Handled before
+      // the generic log below so base64 payloads don't flood the console.
+      if (data.action === "FILE_DOWNLOAD" && data.payload) {
+        const { base64, mimeType, filename, intent } = data.payload;
+        await handleFile(
+          () => writeBase64File(base64, mimeType, filename),
+          intent,
+        );
+        return;
+      }
+      if (data.action === "FILE_FETCH_NATIVE" && data.payload?.url) {
+        const { url, filename, intent } = data.payload;
+        await handleFile(() => downloadUrlToFile(url, filename), intent);
+        return;
+      }
+      if (data.action === "FILE_DOWNLOAD_ERROR") {
+        console.warn("[Native] File download failed in page:", data.payload?.message);
+        Alert.alert("Couldn't open file", "Please try again.");
+        return;
+      }
+      if (data.action === "OPEN_WINDOW" && data.payload?.url) {
+        openWindowUrl(data.payload.url);
+        return;
+      }
+
       console.log("[Native] onMessage received:", event.nativeEvent.data);
       
       if (data.action === "THEME_CHANGE" && data.payload) {
@@ -334,15 +369,49 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
     }
   };
 
+  // View → in-app preview; Download → saved to the device
+  const handleFile = async (
+    getFile: () => DownloadedFile | Promise<DownloadedFile>,
+    intent: FileIntent,
+  ) => {
+    try {
+      const file = await getFile();
+      console.log(`[Native] File ${intent}:`, file.name, file.mimeType);
+      if (intent === "view") setPreviewFile(file);
+      else await saveFile(file);
+    } catch (e) {
+      console.warn(`[Native] Failed to ${intent} file`, e);
+      Alert.alert(
+        intent === "view" ? "Couldn't open file" : "Couldn't download file",
+        "Please try again.",
+      );
+    }
+  };
+
+  const handlePreviewDownload = (file: DownloadedFile) => {
+    saveFile(file).catch((e) => {
+      console.warn("[Native] Failed to download file", e);
+      Alert.alert("Couldn't download file", "Please try again.");
+    });
+  };
+
   // Links opened in a new window (target="_blank" / window.open). Without this
   // handler Android hands them to the system browser. Keep web pages in the
-  // WebView; only non-web schemes (mailto:, tel:, ...) go to the OS.
-  const handleOpenWindow = (event: any) => {
-    const { targetUrl } = event.nativeEvent;
+  // WebView; files (which the WebView can't display) are downloaded through
+  // the bridge, and non-web schemes (mailto:, tel:, ...) go to the OS.
+  const openWindowUrl = (targetUrl: string) => {
     // window.open() with no URL reports about:blank — nothing to open
     if (!targetUrl || targetUrl.startsWith("about:")) return;
 
-    if (/^https?:\/\//i.test(targetUrl)) {
+    const isFile =
+      /^(blob|data):/i.test(targetUrl) ||
+      /\.(pdf|csv|xlsx?|docx?|zip)(?:[?#]|$)/i.test(targetUrl);
+
+    if (isFile) {
+      webViewRef.current?.injectJavaScript(
+        `window.__omnifyDownload && window.__omnifyDownload(${JSON.stringify(targetUrl)}, null, 'view'); true;`,
+      );
+    } else if (/^https?:\/\//i.test(targetUrl)) {
       webViewRef.current?.injectJavaScript(
         `window.location.href = ${JSON.stringify(targetUrl)}; true;`,
       );
@@ -351,6 +420,10 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
         console.warn("[Native] Failed to open external URL:", err),
       );
     }
+  };
+
+  const handleOpenWindow = (event: any) => {
+    openWindowUrl(event.nativeEvent.targetUrl);
   };
 
   const handleRetry = () => {
@@ -401,6 +474,7 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
+          injectedJavaScriptBeforeContentLoaded={FILE_DOWNLOAD_BRIDGE_SCRIPT}
           injectedJavaScript={THEME_DETECTION_SCRIPT}
           onLoadEnd={handleLoadEnd}
           onMessage={onMessage}
@@ -462,6 +536,13 @@ export default function WebViewScreen({ routePath = "" }: WebViewScreenProps) {
         </View>
       )}
       </SafeAreaView>
+
+      <FilePreviewModal
+        file={previewFile}
+        isDark={isDark}
+        onClose={() => setPreviewFile(null)}
+        onDownload={handlePreviewDownload}
+      />
     </View>
   );
 }
